@@ -54,6 +54,8 @@ When charging stops, the calculation stops automatically.
 
 Import the **Company EV Home Charging Reimbursement** Blueprint into Home Assistant and create an automation from it.
 
+[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fraw.githubusercontent.com%2Flianyangyang0608-boop%2FCompany-EV-Home-Charging-Reimbursement%2Frefs%2Fheads%2Fmain%2Fcode)
+
 The Blueprint keeps the setup simple — the user mainly needs to select the charging circuit and electricity pricing method.
 
 <p align="center">
