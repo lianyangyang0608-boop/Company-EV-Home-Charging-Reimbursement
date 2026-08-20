@@ -1,508 +1,226 @@
 blueprint:
   name: Company EV Home Charging Reimbursement
   description: >
-    Track a company EV charging session using an ecoMain monitored circuit
-    and calculate the electricity reimbursement cost.
-
-    The blueprint automatically detects when charging starts and stops.
-
-    Two electricity pricing methods are supported:
-
-    - Fixed Price: use a manually entered electricity price.
-    - Dynamic Price: use a Home Assistant electricity-price sensor,
-      such as a Nord Pool price sensor.
-
-    For dynamic pricing, the charging cost is accumulated during the
-    charging session so that electricity-price changes are reflected
-    in the final reimbursement cost.
-
-    No additional Home Assistant helpers are required.
-
+    Calculate company EV home-charging energy and reimbursement
+    using ecoMain energy metering. Supports fixed electricity price
+    or a dynamic price sensor such as Nord Pool.
   domain: automation
 
   input:
-
-    ev_power_sensor:
-      name: EV Charging Power Sensor
-      description: >
-        Select the ecoMain real-time power sensor for the circuit used
-        to charge the company EV, for example CH1 power_rt.
+    power_sensor:
+      name: Charging power sensor
+      description: Select the ecoMain channel real-time power sensor.
       selector:
         entity:
           domain: sensor
-          device_class: power
 
-    ev_energy_sensor:
-      name: EV Charging Energy Sensor
-      description: >
-        Select the accumulated energy sensor corresponding to the same
-        ecoMain circuit, for example CH1 energy_fwd_total.
+    energy_sensor:
+      name: Charging energy sensor
+      description: Select the cumulative energy sensor of the same ecoMain channel.
       selector:
         entity:
           domain: sensor
-          device_class: energy
 
-    pricing_mode:
-      name: Electricity Pricing Method
-      description: >
-        Choose whether the charging session uses a fixed electricity
-        price or a dynamic electricity-price sensor.
+    price_mode:
+      name: Electricity price mode
       default: fixed
       selector:
         select:
           options:
-            - label: Fixed Price
+            - label: Fixed electricity price
               value: fixed
-            - label: Dynamic Price Sensor
+            - label: Dynamic price sensor / Nord Pool
               value: dynamic
 
     fixed_price:
-      name: Fixed Electricity Price
-      description: >
-        Electricity price in EUR/kWh. This value is used only when
-        Fixed Price is selected.
-      default: 0.15
+      name: Fixed electricity price
+      description: Used only in Fixed mode. Unit should be currency/kWh.
+      default: 0.30
       selector:
         number:
           min: 0
           max: 5
           step: 0.001
           mode: box
-          unit_of_measurement: "EUR/kWh"
 
     dynamic_price_sensor:
-      name: Dynamic Electricity Price Sensor
+      name: Dynamic electricity price sensor
       description: >
-        Select a dynamic electricity-price sensor such as Nord Pool.
-        The sensor should provide the electricity price in EUR/kWh.
-        This input is used only when Dynamic Price Sensor is selected.
-      default: ""
+        Used only in Dynamic mode. Select your Nord Pool price entity
+        or another sensor whose state is the current price per kWh.
+      default: []
       selector:
         entity:
           domain: sensor
 
-    start_threshold:
-      name: Charging Start Threshold
-      description: >
-        Charging starts when the selected ecoMain circuit remains above
-        this power level.
+    start_power:
+      name: Charging start threshold
       default: 500
       selector:
         number:
-          min: 10
-          max: 22000
+          min: 0
+          max: 10000
           step: 10
-          mode: box
           unit_of_measurement: W
 
-    start_duration:
-      name: Charging Start Delay
-      description: >
-        Number of minutes the power must remain above the start threshold
-        before a charging session is started.
-      default: 2
-      selector:
-        number:
-          min: 0
-          max: 30
-          step: 1
-          mode: box
-          unit_of_measurement: min
-
-    stop_threshold:
-      name: Charging Stop Threshold
-      description: >
-        Charging ends when the selected ecoMain circuit remains below
-        this power level.
+    stop_power:
+      name: Charging stop threshold
       default: 100
       selector:
         number:
           min: 0
           max: 5000
           step: 10
-          mode: box
           unit_of_measurement: W
 
-    stop_duration:
-      name: Charging Stop Delay
-      description: >
-        Number of minutes the power must remain below the stop threshold
-        before the charging session is considered complete.
-      default: 5
+    start_delay:
+      name: Start confirmation
+      default:
+        minutes: 2
       selector:
-        number:
-          min: 0
-          max: 30
-          step: 1
-          mode: box
-          unit_of_measurement: min
+        duration:
 
-    calculation_interval:
-      name: Dynamic Price Calculation Interval
-      description: >
-        Cost calculation interval in minutes when dynamic pricing is used.
-        A shorter interval follows electricity-price and energy changes
-        more closely.
-      default: 1
+    stop_delay:
+      name: Stop confirmation
+      default:
+        minutes: 5
       selector:
-        number:
-          min: 1
-          max: 15
-          step: 1
-          mode: box
-          unit_of_measurement: min
-
+        duration:
 
 mode: single
 max_exceeded: silent
 
-
 variables:
-
-  power_entity: !input ev_power_sensor
-  energy_entity: !input ev_energy_sensor
-
-  price_mode: !input pricing_mode
-  fixed_rate: !input fixed_price
+  power_entity: !input power_sensor
+  energy_entity: !input energy_sensor
+  price_mode_var: !input price_mode
+  fixed_price_var: !input fixed_price
   dynamic_price_entity: !input dynamic_price_sensor
-
-  start_power: !input start_threshold
-  start_minutes: !input start_duration
-
-  stop_power: !input stop_threshold
-  stop_minutes: !input stop_duration
-
-  interval_minutes: !input calculation_interval
-
+  stop_power_var: !input stop_power
 
 trigger:
-
-  - platform: template
-    value_template: >
-      {{ states(power_entity) | float(0) > start_power | float(0) }}
-    for:
-      minutes: !input start_duration
-
-
-condition: []
-
+  - platform: numeric_state
+    entity_id: !input power_sensor
+    above: !input start_power
+    for: !input start_delay
 
 action:
-
-  # ----------------------------------------------------------
-  # 1. RECORD CHARGING SESSION START
-  # ----------------------------------------------------------
-
   - variables:
-
-      session_start_energy_raw: >
-        {{ states(energy_entity) | float(0) }}
-
-      previous_energy_raw: >
-        {{ states(energy_entity) | float(0) }}
-
-      accumulated_dynamic_cost: 0
-
-      session_start_time: >
-        {{ now().isoformat() }}
-
-
-  # ----------------------------------------------------------
-  # 2. FIXED PRICE MODE
-  # ----------------------------------------------------------
+      session_start_wh: "{{ states(energy_entity) | float(0) }}"
+      interval_start_wh: "{{ states(energy_entity) | float(0) }}"
+      accumulated_cost: 0
+      current_rate: >
+        {% if price_mode_var == 'dynamic' %}
+          {{ states(dynamic_price_entity) | float(0) }}
+        {% else %}
+          {{ fixed_price_var | float(0) }}
+        {% endif %}
 
   - choose:
 
+      # FIXED PRICE
       - conditions:
           - condition: template
-            value_template: >
-              {{ price_mode == 'fixed' }}
-
+            value_template: "{{ price_mode_var == 'fixed' }}"
         sequence:
 
-          # Wait until charging stops.
-          - wait_template: >
-              {{ states(power_entity) | float(0)
-                 < stop_power | float(0) }}
-            continue_on_timeout: false
+          - wait_for_trigger:
+              - platform: numeric_state
+                entity_id: !input power_sensor
+                below: !input stop_power
+                for: !input stop_delay
 
-          # Confirm that the low-power state persists.
-          - delay:
-              minutes: !input stop_duration
-
-          # If power returned above the stop threshold during
-          # the delay, continue waiting.
-          - repeat:
-              while:
-                - condition: template
-                  value_template: >
-                    {{ states(power_entity) | float(0)
-                       >= stop_power | float(0) }}
-              sequence:
-
-                - wait_template: >
-                    {{ states(power_entity) | float(0)
-                       < stop_power | float(0) }}
-                  continue_on_timeout: false
-
-                - delay:
-                    minutes: !input stop_duration
-
-
-          # Calculate final fixed-price session result.
           - variables:
+              end_wh: "{{ states(energy_entity) | float(0) }}"
+              session_kwh: >
+                {{ ([0,
+                    ((states(energy_entity) | float(0))
+                    - (session_start_wh | float(0))) / 1000]
+                    | max) }}
+              session_cost: >
+                {{ ([0,
+                    ((states(energy_entity) | float(0))
+                    - (session_start_wh | float(0))) / 1000]
+                    | max)
+                    * (fixed_price_var | float(0)) }}
 
-              session_end_energy_raw: >
-                {{ states(energy_entity) | float(0) }}
+          - service: logbook.log
+            data:
+              name: Company EV Charging
+              message: >
+                Charging finished.
+                Energy: {{ session_kwh | round(3) }} kWh.
+                Cost: {{ session_cost | round(2) }}.
+                Fixed rate: {{ fixed_price_var }} /kWh.
 
-              energy_unit: >
-                {{ state_attr(energy_entity, 'unit_of_measurement') | default('Wh') }}
-
-              session_energy_kwh: >
-                {% set start = session_start_energy_raw | float(0) %}
-                {% set end = states(energy_entity) | float(0) %}
-                {% set delta = end - start %}
-                {% set unit = state_attr(energy_entity, 'unit_of_measurement') %}
-                {% if unit == 'Wh' %}
-                  {{ [delta / 1000, 0] | max }}
-                {% else %}
-                  {{ [delta, 0] | max }}
-                {% endif %}
-
-              final_cost: >
-                {{ (session_energy_kwh | float(0)
-                    * fixed_rate | float(0)) | round(4) }}
-
-
-  # ----------------------------------------------------------
-  # 3. DYNAMIC PRICE MODE
-  # ----------------------------------------------------------
-
+      # DYNAMIC PRICE
       - conditions:
           - condition: template
-            value_template: >
-              {{ price_mode == 'dynamic' }}
-
-          - condition: template
-            value_template: >
-              {{ dynamic_price_entity | string | length > 0 }}
-
+            value_template: "{{ price_mode_var == 'dynamic' }}"
         sequence:
 
-          # Repeat while the EV is charging.
           - repeat:
-
               sequence:
 
-                - delay:
-                    minutes: !input calculation_interval
+                - wait_for_trigger:
+
+                    - platform: state
+                      entity_id: !input dynamic_price_sensor
+                      id: price_changed
+
+                    - platform: numeric_state
+                      entity_id: !input power_sensor
+                      below: !input stop_power
+                      for: !input stop_delay
+                      id: charging_stopped
 
                 - variables:
+                    current_wh: "{{ states(energy_entity) | float(0) }}"
 
-                    current_energy_raw: >
-                      {{ states(energy_entity) | float(0) }}
-
-                    interval_energy_kwh: >
-                      {% set current =
-                           states(energy_entity) | float(0) %}
-                      {% set previous =
-                           previous_energy_raw | float(0) %}
-                      {% set delta = current - previous %}
-                      {% set unit =
-                           state_attr(
-                             energy_entity,
-                             'unit_of_measurement'
-                           )
-                      %}
-
-                      {% if delta <= 0 %}
-                        0
-                      {% elif unit == 'Wh' %}
-                        {{ delta / 1000 }}
-                      {% else %}
-                        {{ delta }}
-                      {% endif %}
-
-                    current_price: >
-                      {{ states(dynamic_price_entity) | float(0) }}
+                    interval_kwh: >
+                      {{ ([0,
+                          ((states(energy_entity) | float(0))
+                          - (interval_start_wh | float(0))) / 1000]
+                          | max) }}
 
                     interval_cost: >
-                      {{
-                        (interval_energy_kwh | float(0))
-                        *
-                        (states(dynamic_price_entity) | float(0))
-                      }}
+                      {{ ([0,
+                          ((states(energy_entity) | float(0))
+                          - (interval_start_wh | float(0))) / 1000]
+                          | max)
+                          * (current_rate | float(0)) }}
 
-                    accumulated_dynamic_cost: >
-                      {{
-                        (accumulated_dynamic_cost | float(0))
-                        +
-                        (interval_cost | float(0))
-                      }}
+                    accumulated_cost: >
+                      {{ (accumulated_cost | float(0))
+                         + (interval_cost | float(0)) }}
 
-                    previous_energy_raw: >
+                    interval_start_wh: >
                       {{ states(energy_entity) | float(0) }}
 
+                    current_rate: >
+                      {% if wait.trigger.id == 'price_changed' %}
+                        {{ states(dynamic_price_entity) | float(0) }}
+                      {% else %}
+                        {{ current_rate | float(0) }}
+                      {% endif %}
 
               until:
-
                 - condition: template
                   value_template: >
-                    {{ states(power_entity) | float(0)
-                       < stop_power | float(0) }}
+                    {{ wait.trigger.id == 'charging_stopped' }}
 
-
-          # Confirm charging has actually stopped.
-          - delay:
-              minutes: !input stop_duration
-
-
-          # If charging resumed, continue accumulating.
-          - repeat:
-
-              while:
-
-                - condition: template
-                  value_template: >
-                    {{ states(power_entity) | float(0)
-                       >= stop_power | float(0) }}
-
-              sequence:
-
-                - delay:
-                    minutes: !input calculation_interval
-
-                - variables:
-
-                    current_energy_raw: >
-                      {{ states(energy_entity) | float(0) }}
-
-                    interval_energy_kwh: >
-                      {% set current =
-                           states(energy_entity) | float(0) %}
-                      {% set previous =
-                           previous_energy_raw | float(0) %}
-                      {% set delta = current - previous %}
-                      {% set unit =
-                           state_attr(
-                             energy_entity,
-                             'unit_of_measurement'
-                           )
-                      %}
-
-                      {% if delta <= 0 %}
-                        0
-                      {% elif unit == 'Wh' %}
-                        {{ delta / 1000 }}
-                      {% else %}
-                        {{ delta }}
-                      {% endif %}
-
-                    interval_cost: >
-                      {{
-                        (interval_energy_kwh | float(0))
-                        *
-                        (states(dynamic_price_entity) | float(0))
-                      }}
-
-                    accumulated_dynamic_cost: >
-                      {{
-                        (accumulated_dynamic_cost | float(0))
-                        +
-                        (interval_cost | float(0))
-                      }}
-
-                    previous_energy_raw: >
-                      {{ states(energy_entity) | float(0) }}
-
-
-          # Add the final unprocessed energy interval.
           - variables:
+              session_kwh: >
+                {{ ([0,
+                    ((states(energy_entity) | float(0))
+                    - (session_start_wh | float(0))) / 1000]
+                    | max) }}
 
-              session_end_energy_raw: >
-                {{ states(energy_entity) | float(0) }}
-
-              final_interval_energy_kwh: >
-                {% set current =
-                     states(energy_entity) | float(0) %}
-                {% set previous =
-                     previous_energy_raw | float(0) %}
-                {% set delta = current - previous %}
-                {% set unit =
-                     state_attr(
-                       energy_entity,
-                       'unit_of_measurement'
-                     )
-                %}
-
-                {% if delta <= 0 %}
-                  0
-                {% elif unit == 'Wh' %}
-                  {{ delta / 1000 }}
-                {% else %}
-                  {{ delta }}
-                {% endif %}
-
-              final_interval_cost: >
-                {{
-                  (final_interval_energy_kwh | float(0))
-                  *
-                  (states(dynamic_price_entity) | float(0))
-                }}
-
-              final_cost: >
-                {{
-                  (
-                    (accumulated_dynamic_cost | float(0))
-                    +
-                    (final_interval_cost | float(0))
-                  ) | round(4)
-                }}
-
-              session_energy_kwh: >
-                {% set start =
-                     session_start_energy_raw | float(0) %}
-                {% set end =
-                     states(energy_entity) | float(0) %}
-                {% set delta = end - start %}
-                {% set unit =
-                     state_attr(
-                       energy_entity,
-                       'unit_of_measurement'
-                     )
-                %}
-
-                {% if delta <= 0 %}
-                  0
-                {% elif unit == 'Wh' %}
-                  {{ delta / 1000 }}
-                {% else %}
-                  {{ delta }}
-                {% endif %}
-
-
-  # ----------------------------------------------------------
-  # 4. WRITE RESULT TO AUTOMATION TRACE / LOGBOOK
-  # ----------------------------------------------------------
-
-  - variables:
-
-      session_end_time: >
-        {{ now().isoformat() }}
-
-      pricing_description: >
-        {% if price_mode == 'dynamic' %}
-          Dynamic electricity price
-        {% else %}
-          Fixed price — {{ fixed_rate }} EUR/kWh
-        {% endif %}
-
-
-  - service: logbook.log
-    data:
-      name: Company EV Home Charging
-      message: >
-        Charging session complete.
-        Energy: {{ session_energy_kwh | float(0) | round(3) }} kWh.
-        Cost: €{{ final_cost | float(0) | round(2) }}.
-        Pricing: {{ pricing_description }}.
+          - service: logbook.log
+            data:
+              name: Company EV Charging
+              message: >
+                Charging finished.
+                Energy: {{ session_kwh | round(3) }} kWh.
+                Dynamic electricity cost:
+                {{ accumulated_cost | float(0) | round(2) }}.
