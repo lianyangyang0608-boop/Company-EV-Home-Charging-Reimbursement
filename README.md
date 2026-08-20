@@ -36,44 +36,6 @@ After that, the Blueprint handles the calculation automatically.
   <img src="images/how-it-works.png" width="850">
 </p>
 
-The basic workflow is:
-
-```text
-                     Company EV
-                         🚗
-                          │
-                          ▼
-                    Home Charger
-                          │
-                          ▼
-                      ecoMain
-                  EV Charging Circuit
-                          │
-                          ▼
-                 Real-time Power (W)
-                          │
-                          ▼
-                  Home Assistant
-                          │
-             ┌────────────┴────────────┐
-             │                         │
-             ▼                         ▼
-       💶 Fixed Price             ⚡ Dynamic Price
-        EUR/kWh                    Nord Pool
-             │                         │
-             └────────────┬────────────┘
-                          │
-                          ▼
-                 Charging Cost
-                          │
-                          ▼
-                📅 THIS MONTH
-                          │
-                          ▼
-                 Reimbursement
-                     € XX.XX
-```
-
 When EV charging is detected, the Blueprint periodically calculates:
 
 \[
@@ -133,10 +95,6 @@ Import the **Company EV Home Charging Reimbursement** Blueprint into Home Assist
 [![Open your Home Assistant instance and show the blueprint import dialog](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=YOUR_GITHUB_BLUEPRINT_URL)
 
 Then create a new automation from the imported Blueprint.
-
-<p align="center">
-  <img src="images/import-blueprint.png" width="800">
-</p>
 
 The Blueprint handles:
 
@@ -343,32 +301,72 @@ The confirmation delay helps prevent short power spikes from being interpreted a
 
 ---
 
-# ⚡ Live Example
+## 📈 Real-World Test: Dynamic Nord Pool Pricing
 
-Below is an example of ecoMain monitoring a charging circuit in Home Assistant.
+To verify the automation under real operating conditions, the system was tested using an actual ecoMain circuit together with a live Nord Pool electricity price sensor.
 
-<p align="center">
-  <img src="images/ecomain-live-power.png" width="800">
-</p>
+During the test, three values were recorded simultaneously:
 
-For example, if ecoMain reports:
+1. **Real-time charging power from ecoMain**
+2. **Live Nord Pool electricity price**
+3. **Accumulated EV charging cost**
 
-| Measurement | Value |
-|---|---:|
-| **EV circuit power** | `897 W` |
-| **Electricity price** | `0.15 EUR/kWh` |
+### ⚡ Charging Power
 
-then the approximate instantaneous charging cost rate is:
+![EV Charging Power](images/dynamic-power.png)
 
-\[
-0.897\times0.15
-=
-0.135\ \mathrm{EUR/h}
-\]
+ecoMain continuously measured the selected charging circuit at approximately **0.9 kW** during the test.
 
-With the default one-minute interval, the Blueprint periodically adds the corresponding cost to the monthly reimbursement.
+At around 15:00, the load dropped to nearly zero, indicating that charging had stopped.
 
 ---
+
+### 💶 Dynamic Nord Pool Price
+
+![Nord Pool Dynamic Price](images/dynamic-price.png)
+
+The electricity price was not fixed during the charging session.
+
+The Nord Pool sensor automatically supplied the current electricity price to Home Assistant, including several price changes during the test.
+
+No manual tariff update was required.
+
+---
+
+### 📊 Accumulated Charging Cost
+
+![Dynamic Charging Cost](images/dynamic-cost.png)
+
+While the EV was charging, the reimbursement cost increased continuously according to the actual electricity price at that moment.
+
+Conceptually:
+
+$$
+C = \int P(t)\,p(t)\,dt
+$$
+
+where:
+
+- $P(t)$ = real-time charging power
+- $p(t)$ = electricity price at that moment
+- $C$ = accumulated charging cost
+
+In this test, the accumulated cost increased from approximately **€0.439** to **€0.739**.
+
+When charging stopped and the measured power dropped to nearly zero, the accumulated cost stopped increasing automatically.
+
+### ✅ What This Test Demonstrates
+
+The system does not assume one fixed electricity price for the entire charging session.
+
+Instead, it follows the actual electricity price over time:
+
+**ecoMain power measurement → Nord Pool price → real-time cost integration → monthly reimbursement**
+
+This makes the same Blueprint suitable for both:
+
+- **Fixed electricity tariffs**
+- **Dynamic electricity pricing such as Nord Pool**
 
 # 📅 Monthly Reimbursement
 
