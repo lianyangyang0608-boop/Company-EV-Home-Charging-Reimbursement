@@ -1,24 +1,39 @@
 blueprint:
-  name: Company EV Home Charging Cost
+  name: Company EV Home Charging Reimbursement
   description: >
-    Calculate accumulated EV home charging cost from a selected
-    power sensor. Supports either a fixed electricity price or
-    a dynamic electricity price sensor such as Nord Pool.
-    Only one Number Helper is required for the accumulated cost.
+    Track the electricity cost of charging a company EV at home using an
+    ecoMain power sensor.
+
+    Supports:
+    - Fixed electricity price
+    - Dynamic electricity price sensor such as Nord Pool
+    - Automatic monthly reimbursement accumulation
+    - Automatic reset on the first day of each month
+
+    Only one Number Helper is required:
+    Company EV Monthly Reimbursement.
+
+    Cost is accumulated approximately once per minute while the selected
+    charging circuit is above the charging threshold.
+
   domain: automation
 
   input:
-    power_sensor:
+
+    ev_power_sensor:
       name: EV Charging Power Sensor
-      description: Select the ecoMain channel used for EV charging.
+      description: >
+        Select the ecoMain real-time power sensor for the circuit used
+        to charge the company EV, for example main_ch1_power_rt.
       selector:
         entity:
-          filter:
-            - domain: sensor
-              device_class: power
+          domain: sensor
 
-    price_mode:
-      name: Electricity Price Mode
+    pricing_mode:
+      name: Electricity Pricing Method
+      description: >
+        Choose a manually entered fixed electricity price or a dynamic
+        electricity price sensor such as Nord Pool.
       default: fixed
       selector:
         select:
@@ -31,7 +46,8 @@ blueprint:
     fixed_price:
       name: Fixed Electricity Price
       description: >
-        Electricity price per kWh. Used only when Fixed Price is selected.
+        Electricity price in EUR/kWh.
+        Used only when Fixed Price is selected.
       default: 0.30
       selector:
         number:
@@ -39,111 +55,293 @@ blueprint:
           max: 5
           step: 0.001
           mode: box
+          unit_of_measurement: "EUR/kWh"
 
     dynamic_price_sensor:
-      name: Dynamic Price Sensor
+      name: Dynamic Electricity Price Sensor
       description: >
-        Select the current electricity price sensor, for example Nord Pool.
         Used only in Dynamic Price mode.
-      default: []
+        Select a sensor whose state represents the current electricity
+        price in EUR/kWh, for example a Nord Pool price sensor.
+      default: ""
       selector:
         entity:
           domain: sensor
 
-    cost_output:
-      name: Accumulated Charging Cost
+    reimbursement_output:
+      name: Monthly Reimbursement Output
       description: >
-        Select the Number Helper used to store accumulated charging cost.
+        Select the Number Helper used to store the current month's
+        accumulated company EV charging reimbursement.
       selector:
         entity:
           domain: input_number
 
-    start_power:
-      name: Charging Start Threshold
+    charging_threshold:
+      name: Charging Power Threshold
+      description: >
+        Cost accumulation starts when the selected circuit remains
+        above this power level.
       default: 500
       selector:
         number:
-          min: 0
-          max: 10000
+          min: 10
+          max: 22000
           step: 10
+          mode: box
           unit_of_measurement: W
 
-    stop_power:
-      name: Charging Stop Threshold
-      default: 100
+    start_confirmation:
+      name: Charging Start Confirmation
+      description: >
+        How long the charging power must remain above the threshold
+        before a charging session starts.
+      default:
+        minutes: 2
+      selector:
+        duration:
+
+    calculation_interval:
+      name: Cost Calculation Interval
+      description: >
+        How often the charging cost is added to the monthly reimbursement.
+        One minute is recommended.
+      default: 1
       selector:
         number:
-          min: 0
-          max: 5000
-          step: 10
-          unit_of_measurement: W
+          min: 1
+          max: 15
+          step: 1
+          mode: box
+          unit_of_measurement: min
+
 
 variables:
-  power_entity: !input power_sensor
-  price_mode_var: !input price_mode
+
+  power_entity: !input ev_power_sensor
+
+  pricing_mode_var: !input pricing_mode
+
   fixed_price_var: !input fixed_price
+
   dynamic_price_entity: !input dynamic_price_sensor
-  cost_entity: !input cost_output
-  stop_power_var: !input stop_power
 
-trigger:
-  - platform: numeric_state
-    entity_id: !input power_sensor
-    above: !input start_power
-    for:
-      seconds: 5
+  reimbursement_entity: !input reimbursement_output
 
-condition: []
+  charging_threshold_var: !input charging_threshold
 
-action:
+  interval_minutes: !input calculation_interval
 
-  # Charging session starts.
-  - repeat:
-      sequence:
 
-        # Wait one minute before calculating the next cost increment.
-        - delay:
-            minutes: 1
+triggers:
 
-        - variables:
+  # ============================================================
+  # EV CHARGING START
+  # ============================================================
 
-            current_power_kw: >
-              {{ (states(power_entity) | float(0)) / 1000 }}
+  - trigger: numeric_state
+    entity_id: !input ev_power_sensor
+    above: !input charging_threshold
+    for: !input start_confirmation
+    id: charging_start
 
-            current_price: >
-              {% if price_mode_var == 'dynamic' %}
-                {{ states(dynamic_price_entity) | float(0) }}
-              {% else %}
-                {{ fixed_price_var | float(0) }}
-              {% endif %}
 
-            cost_increment: >
-              {% set p = (states(power_entity) | float(0)) / 1000 %}
-              {% if price_mode_var == 'dynamic' %}
-                {% set price = states(dynamic_price_entity) | float(0) %}
-              {% else %}
-                {% set price = fixed_price_var | float(0) %}
-              {% endif %}
+  # ============================================================
+  # MONTHLY RESET
+  # Runs every day at midnight, but only resets on day 1.
+  # ============================================================
 
-              {{ p * price / 60 }}
+  - trigger: time
+    at: "00:00:00"
+    id: monthly_reset
 
-        - action: input_number.set_value
-          target:
-            entity_id: !input cost_output
-          data:
-            value: >
-              {{
-                (
-                  states(cost_entity) | float(0)
-                  +
-                  cost_increment | float(0)
-                ) | round(3)
-              }}
 
-      until:
-        - condition: template
-          value_template: >
-            {{ states(power_entity) | float(0) < stop_power_var | float(0) }}
+conditions: []
 
-mode: single
-max_exceeded: silent
+
+actions:
+
+  - choose:
+
+      # ========================================================
+      # 1. MONTHLY RESET
+      # ========================================================
+
+      - conditions:
+
+          - condition: trigger
+            id:
+              - monthly_reset
+
+          - condition: template
+            value_template: >
+              {{ now().day == 1 }}
+
+        sequence:
+
+          - action: input_number.set_value
+            target:
+              entity_id: !input reimbursement_output
+            data:
+              value: 0
+
+          - action: logbook.log
+            data:
+              name: Company EV Home Charging
+              message: >
+                Monthly EV charging reimbursement reset for
+                {{ now().strftime('%B %Y') }}.
+
+
+      # ========================================================
+      # 2. EV CHARGING COST ACCUMULATION
+      # ========================================================
+
+      - conditions:
+
+          - condition: trigger
+            id:
+              - charging_start
+
+        sequence:
+
+          - repeat:
+
+              sequence:
+
+                # ------------------------------------------------
+                # Wait until the next calculation interval
+                # ------------------------------------------------
+
+                - delay:
+                    minutes: !input calculation_interval
+
+
+                # ------------------------------------------------
+                # Calculate current electricity price and
+                # charging cost for this interval
+                # ------------------------------------------------
+
+                - variables:
+
+                    current_power_kw: >
+                      {{
+                        (
+                          states(power_entity)
+                          | float(0)
+                        ) / 1000
+                      }}
+
+                    current_price: >
+                      {% if pricing_mode_var == 'dynamic' %}
+
+                        {{
+                          states(dynamic_price_entity)
+                          | float(0)
+                        }}
+
+                      {% else %}
+
+                        {{
+                          fixed_price_var
+                          | float(0)
+                        }}
+
+                      {% endif %}
+
+                    interval_cost: >
+                      {% set power_kw =
+                        (
+                          states(power_entity)
+                          | float(0)
+                        ) / 1000
+                      %}
+
+                      {% if pricing_mode_var == 'dynamic' %}
+
+                        {% set price =
+                          states(dynamic_price_entity)
+                          | float(0)
+                        %}
+
+                      {% else %}
+
+                        {% set price =
+                          fixed_price_var
+                          | float(0)
+                        %}
+
+                      {% endif %}
+
+                      {{
+                        power_kw
+                        * price
+                        * (interval_minutes | float(1))
+                        / 60
+                      }}
+
+
+                # ------------------------------------------------
+                # Add cost to this month's reimbursement
+                # ------------------------------------------------
+
+                - action: input_number.set_value
+                  target:
+                    entity_id: !input reimbursement_output
+                  data:
+                    value: >
+                      {{
+                        (
+                          states(reimbursement_entity)
+                          | float(0)
+                          +
+                          interval_cost
+                          | float(0)
+                        )
+                        | round(3)
+                      }}
+
+
+              # ==================================================
+              # STOP WHEN CHARGING POWER FALLS BELOW THRESHOLD
+              # ==================================================
+
+              until:
+
+                - condition: template
+                  value_template: >
+                    {{
+                      states(power_entity)
+                      | float(0)
+                      <
+                      charging_threshold_var
+                      | float(0)
+                    }}
+
+
+          # ======================================================
+          # SESSION FINISHED
+          # ======================================================
+
+          - action: logbook.log
+            data:
+              name: Company EV Home Charging
+              message: >
+                Charging session finished.
+                Current monthly reimbursement:
+                €{{
+                  states(reimbursement_entity)
+                  | float(0)
+                  | round(2)
+                }}.
+
+
+# ==============================================================
+# Parallel mode is important:
+#
+# A charging session may still be running at midnight.
+# Monthly reset must therefore be allowed to execute independently.
+# ==============================================================
+
+mode: parallel
+max: 2
