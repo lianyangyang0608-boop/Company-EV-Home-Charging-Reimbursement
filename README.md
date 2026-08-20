@@ -1,177 +1,88 @@
 # 🚗 Company EV Home Charging Reimbursement
 
-> Automatically calculate the monthly cost of charging a **company EV at home** using **ecoMain + Home Assistant**, with either a **fixed electricity tariff** or **dynamic electricity prices such as Nord Pool**.
-
 <p align="center">
-  <img src="images/hero.png" width="850">
+  <img src="images/hero.png" width="900" alt="Company EV Home Charging Reimbursement">
 </p>
 
 <p align="center">
-  <b>⚡ Measure &nbsp;→&nbsp; 💶 Calculate &nbsp;→&nbsp; 📅 Reimburse</b>
+  Automatically calculate the electricity cost of charging a company EV at home using <b>ecoMain</b> and <b>Home Assistant</b>.
 </p>
 
 ---
 
-## 💡 The Idea
+## 💡 What Does It Do?
 
-Charging a company EV at home creates a simple question:
+Charging a company EV at home creates a simple problem:
 
-> **How much of the household electricity bill should be reimbursed by the company?**
+**How much of the household electricity bill belongs to the company car?**
 
-With ecoMain monitoring the EV charging circuit, Home Assistant can automatically calculate the charging cost and keep a running total for the current month.
+This Blueprint uses an **ecoMain circuit** to detect EV charging and automatically calculates the corresponding electricity cost.
 
-The user only needs to:
+It supports:
 
-1. Select the **ecoMain channel** monitoring the EV charging circuit.
-2. Choose a **fixed electricity price** or a **dynamic price sensor** such as Nord Pool.
-3. Select one Number Helper to store the monthly reimbursement.
+- ⚡ Automatic EV charging detection
+- 💶 Fixed electricity prices
+- 📈 Dynamic electricity prices such as Nord Pool
+- 🧮 Automatic charging cost calculation
+- 📅 Monthly reimbursement tracking
 
-After that, the Blueprint handles the calculation automatically.
+> **Select the charging circuit + select the electricity price → get the reimbursement amount.**
 
 ---
 
 ## 🔄 How It Works
 
 <p align="center">
-  <img src="images/how-it-works.png" width="850">
+  <img src="images/how-it-works.png" width="950" alt="EV Charging Reimbursement Workflow">
 </p>
 
-When EV charging is detected, the Blueprint periodically calculates:
+ecoMain measures the power of the circuit used by the EV.
 
-\[
-\Delta C = P_{\mathrm{EV}} \times p_{\mathrm{electricity}} \times \Delta t
-\]
+When charging is detected, the Blueprint calculates:
 
-where:
+> **Charging cost = EV power × electricity price × time**
 
-- \(P_{\mathrm{EV}}\) = measured EV charging power in kW
-- \(p_{\mathrm{electricity}}\) = electricity price in EUR/kWh
-- \(\Delta t\) = calculation interval in hours
+The cost is continuously added to the current month's reimbursement.
 
-Each cost increment is added to the current month's reimbursement.
+When charging stops, the calculation stops automatically.
 
 ---
 
-# 🚀 Setup
+# 🛠️ Setup
 
-Only **one Helper + one Blueprint** are required.
+## 1. Import the Blueprint
 
----
+Import the **Company EV Home Charging Reimbursement** Blueprint into Home Assistant and create an automation from it.
 
-## ① Create One Number Helper
-
-Go to:
-
-**Settings → Devices & services → Helpers → Create helper → Number**
-
-Create the following Helper:
-
-| Setting | Value |
-|---|---|
-| **Name** | `Company EV Monthly Reimbursement` |
-| **Minimum value** | `0` |
-| **Maximum value** | `10000` |
-| **Step size** | `0.001` |
-| **Unit of measurement** | `EUR` |
-| **Display mode** | Input field |
+The Blueprint keeps the setup simple — the user mainly needs to select the charging circuit and electricity pricing method.
 
 <p align="center">
-  <img src="images/create-reimbursement-helper.png" width="750">
+  <img src="images/blueprint-config.png" width="850" alt="Company EV Reimbursement Blueprint Configuration">
 </p>
-
-> [!TIP]
-> This is the **only Helper required** by the example.
-
-The Helper stores the accumulated charging reimbursement for the current month.
 
 ---
 
-## ② Import the Blueprint
+## 2. Select the EV Charging Circuit
 
-Import the **Company EV Home Charging Reimbursement** Blueprint into Home Assistant.
-
-<!-- Replace YOUR_GITHUB_BLUEPRINT_URL with the final raw GitHub URL -->
-
-[![Open your Home Assistant instance and show the blueprint import dialog](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=YOUR_GITHUB_BLUEPRINT_URL)
-
-Then create a new automation from the imported Blueprint.
-
-The Blueprint handles:
-
-- EV charging detection
-- fixed or dynamic electricity pricing
-- periodic charging-cost calculation
-- monthly reimbursement accumulation
-- automatic monthly reset
-
-No additional charging-status, start-energy, price-interval, or cost-accumulator Helpers are required.
-
----
-
-## ③ Configure the Blueprint
-
-The main Blueprint configuration is intentionally simple.
-
-<p align="center">
-  <img src="images/blueprint-config.png" width="800">
-</p>
-
-### EV Charging Power Sensor
-
-Select the ecoMain real-time power sensor connected to the EV charging circuit.
+Choose the ecoMain real-time power sensor corresponding to the circuit used for EV charging.
 
 For example:
 
 ```text
-EcoMain ... main_ch1_power_rt
+sensor.ecomain_xxx_main_ch1_power_rt
 ```
 
-or an entity similar to:
-
-```text
-sensor.ecomain_xxxxxxxxxxxx_local_main_ch1_power_rt
-```
-
-> [!NOTE]
-> The exact entity ID depends on the ecoMain installation and the channel used for the EV charger.
+For the most accurate reimbursement calculation, the selected circuit should preferably be dedicated to EV charging.
 
 ---
 
-### Monthly Reimbursement Output
+## 3. Choose the Electricity Price
 
-Select:
+Two pricing methods are supported.
 
-```text
-Company EV Monthly Reimbursement
-```
+### 💶 Option A — Fixed Electricity Price
 
-This is the Number Helper created in Step ①.
-
----
-
-# 💶 Choose Your Electricity Price
-
-The Blueprint supports two pricing methods.
-
-| 💶 Fixed Price | ⚡ Dynamic Price |
-|:---:|:---:|
-| Enter the electricity tariff manually | Select a dynamic price sensor |
-| `0.30 EUR/kWh` | e.g. Nord Pool |
-| Simple and widely applicable | Automatically follows price changes |
-| Best for fixed household tariffs | Best for hourly/dynamic tariffs |
-
----
-
-## Option A — Fixed Electricity Price
-
-Select:
-
-```text
-Electricity Pricing Method:
-Fixed Price
-```
-
-Then enter the household electricity price.
+For a fixed electricity contract, select **Fixed Price** and enter the tariff manually.
 
 For example:
 
@@ -180,425 +91,151 @@ For example:
 ```
 
 <p align="center">
-  <img src="images/fixed-price.png" width="700">
+  <img src="images/fixed-price.png" width="850" alt="Fixed Electricity Price Configuration">
 </p>
 
-For a fixed tariff, the charging cost is calculated from:
-
-\[
-C \approx \sum_t P_{\mathrm{EV}}(t)\,p_{\mathrm{fixed}}\,\Delta t
-\]
-
-### Example
-
-If the EV is charging at:
-
-```text
-Power = 7.2 kW
-Price = 0.30 EUR/kWh
-```
-
-the current charging cost rate is approximately:
-
-\[
-7.2 \times 0.30 = 2.16\ \mathrm{EUR/h}
-\]
-
-With a one-minute calculation interval:
-
-\[
-\Delta C
-=
-2.16\times\frac{1}{60}
-=
-0.036\ \mathrm{EUR}
-\]
-
-The Blueprint adds this cost to the monthly reimbursement automatically.
+This is the simplest option for users whose electricity price does not change throughout the day.
 
 ---
 
-## Option B — Dynamic Price / Nord Pool
+### 📈 Option B — Dynamic Electricity Price
 
-If a dynamic electricity-price integration is available, select:
-
-```text
-Electricity Pricing Method:
-Dynamic Price / Nord Pool
-```
-
-Then select the corresponding electricity-price sensor.
+For dynamic electricity pricing, select **Dynamic Price** and choose an electricity price sensor.
 
 For example:
 
 ```text
-sensor.nordpool_...
+sensor.nordpool_kwh_se3_eur_xxx
 ```
 
 <p align="center">
-  <img src="images/nordpool-price.png" width="700">
+  <img src="images/nordpool-price.png" width="850" alt="Nord Pool Dynamic Price Configuration">
 </p>
 
-The Blueprint reads the current electricity price automatically:
+The Blueprint automatically reads the latest price from the selected sensor while the EV is charging.
 
-\[
-C
-\approx
-\sum_t
-P_{\mathrm{EV}}(t)
-\,
-p_{\mathrm{dynamic}}(t)
-\,
-\Delta t
-\]
-
-This means the charging cost automatically follows electricity-price changes.
-
-### Example
-
-An overnight charging session might look like:
-
-| Time | Charging Power | Electricity Price |
-|---|---:|---:|
-| 22:00 | 7.2 kW | 0.12 EUR/kWh |
-| 23:00 | 7.2 kW | 0.08 EUR/kWh |
-| 00:00 | 7.2 kW | 0.05 EUR/kWh |
-| 01:00 | 7.2 kW | 0.07 EUR/kWh |
-
-Instead of applying one electricity price to the entire charging session, Home Assistant uses the current price during each calculation interval.
-
-> [!TIP]
-> Dynamic pricing is optional. Users without Nord Pool or another dynamic-price integration can simply use **Fixed Price**.
+This allows the reimbursement calculation to follow actual electricity price changes instead of assuming one fixed tariff.
 
 ---
 
-# ⚡ Charging Detection
+## 4. Select the Monthly Reimbursement Helper
 
-The Blueprint uses ecoMain's real-time power measurement to determine when charging starts.
+Create one Number Helper in Home Assistant:
 
-Default settings:
+**Settings → Devices & services → Helpers → Create helper → Number**
 
-| Parameter | Default |
-|---|---:|
-| **Charging Power Threshold** | `500 W` |
-| **Charging Start Confirmation** | `2 min` |
-| **Cost Calculation Interval** | `1 min` |
-
-The charging session starts when:
+Example:
 
 ```text
-EV circuit power > 500 W
-        │
-        │ continuously for 2 minutes
-        ▼
-Charging detected
-        │
-        ▼
-Start accumulating cost
+Name: Company EV Monthly Reimbursement
+Minimum: 0
+Maximum: 10000
+Step: 0.01
+Unit: EUR
 ```
 
-The confirmation delay helps prevent short power spikes from being interpreted as EV charging.
-
----
-
-## 📈 Real-World Test: Dynamic Nord Pool Pricing
-
-To verify the automation under real operating conditions, the system was tested using an actual ecoMain circuit together with a live Nord Pool electricity price sensor.
-
-During the test, three values were recorded simultaneously:
-
-1. **Real-time charging power from ecoMain**
-2. **Live Nord Pool electricity price**
-3. **Accumulated EV charging cost**
-
-### ⚡ Charging Power
-
-![EV Charging Power](images/dynamic-power.png)
-
-ecoMain continuously measured the selected charging circuit at approximately **0.9 kW** during the test.
-
-At around 15:00, the load dropped to nearly zero, indicating that charging had stopped.
-
----
-
-### 💶 Dynamic Nord Pool Price
-
-![Nord Pool Dynamic Price](images/dynamic-price.png)
-
-The electricity price was not fixed during the charging session.
-
-The Nord Pool sensor automatically supplied the current electricity price to Home Assistant, including several price changes during the test.
-
-No manual tariff update was required.
-
----
-
-### 📊 Accumulated Charging Cost
-
-![Dynamic Charging Cost](images/dynamic-cost.png)
-
-While the EV was charging, the reimbursement cost increased continuously according to the actual electricity price at that moment.
-
-Conceptually:
-
-$$
-C = \int P(t)\,p(t)\,dt
-$$
-
-where:
-
-- $P(t)$ = real-time charging power
-- $p(t)$ = electricity price at that moment
-- $C$ = accumulated charging cost
-
-In this test, the accumulated cost increased from approximately **€0.439** to **€0.739**.
-
-When charging stopped and the measured power dropped to nearly zero, the accumulated cost stopped increasing automatically.
-
-### ✅ What This Test Demonstrates
-
-The system does not assume one fixed electricity price for the entire charging session.
-
-Instead, it follows the actual electricity price over time:
-
-**ecoMain power measurement → Nord Pool price → real-time cost integration → monthly reimbursement**
-
-This makes the same Blueprint suitable for both:
-
-- **Fixed electricity tariffs**
-- **Dynamic electricity pricing such as Nord Pool**
-
-# 📅 Monthly Reimbursement
-
-The final result is intentionally simple:
-
-<p align="center">
-  <img src="images/monthly-reimbursement.png" width="800">
-</p>
-
-<p align="center">
-  <strong style="font-size: 24px;">THIS MONTH</strong>
-</p>
-
-<p align="center">
-  <strong>Company EV Monthly Reimbursement</strong><br>
-  <strong>€31.46</strong>
-</p>
-
-The value represents the accumulated company-EV home-charging cost for the current month.
-
-Every time charging is detected:
-
-```text
-€12.41
-   ↓
-€12.45
-   ↓
-€12.49
-   ↓
-   ...
-   ↓
-€31.46
-```
-
-The employee can then use the monthly value as a reference when submitting the charging cost for reimbursement.
-
----
-
-## 🔄 Automatic Monthly Reset
-
-At:
-
-```text
-00:00 on the first day of each month
-```
-
-the Blueprint automatically resets:
-
-```text
-Company EV Monthly Reimbursement
-```
-
-to:
-
-```text
-€0.00
-```
-
-For example:
-
-```text
-┌──────────────────────────────┐
-│        AUGUST 31             │
-│                              │
-│  Monthly Reimbursement       │
-│          €31.46              │
-└──────────────┬───────────────┘
-               │
-               │  September 1
-               │  00:00
-               ▼
-┌──────────────────────────────┐
-│       SEPTEMBER 1            │
-│                              │
-│  Monthly Reimbursement       │
-│           €0.00              │
-└──────────────────────────────┘
-```
-
-A new monthly reimbursement period then begins automatically.
-
----
-
-# 🏠 Example Dashboard
-
-A simple Home Assistant dashboard can display the most useful information:
-
-<p align="center">
-  <img src="images/dashboard.png" width="850">
-</p>
-
-Suggested entities:
-
-| Dashboard Item | Purpose |
-|---|---|
-| ⚡ **EV Charging Power** | Current ecoMain charging-circuit power |
-| 💶 **Electricity Price** | Current fixed or dynamic electricity price |
-| 📅 **Monthly Reimbursement** | Current month's company EV charging cost |
-
-The main result remains:
-
-> ### **This Month: €XX.XX**
-
-No manual charging log or spreadsheet is required.
-
----
-
-# 🧩 Example Configuration
-
-A typical ecoMain + Nord Pool setup might look like:
-
-| Blueprint Setting | Example |
-|---|---|
-| **EV Charging Power Sensor** | ecoMain CH1 `power_rt` |
-| **Electricity Pricing Method** | Dynamic Price / Nord Pool |
-| **Dynamic Price Sensor** | Nord Pool SE3 |
-| **Monthly Reimbursement Output** | Company EV Monthly Reimbursement |
-| **Charging Power Threshold** | 500 W |
-| **Charging Start Confirmation** | 2 min |
-| **Cost Calculation Interval** | 1 min |
-
-For a fixed-price household:
-
-| Blueprint Setting | Example |
-|---|---|
-| **Electricity Pricing Method** | Fixed Price |
-| **Fixed Electricity Price** | 0.30 EUR/kWh |
-
-Everything else works the same way.
-
----
-
-# 📊 System Overview
-
-| Component | Function |
-|---|---|
-| **ecoMain** | Measures the EV charging circuit in real time |
-| **Home Assistant** | Runs the reimbursement automation |
-| **Fixed Price** | Allows manual electricity-price input |
-| **Nord Pool / Dynamic Price Sensor** | Provides changing electricity prices |
-| **Blueprint** | Calculates and accumulates charging cost |
-| **Number Helper** | Stores the current monthly reimbursement |
-
----
-
-# ✨ Why This Example?
-
-Without automation:
-
-```text
-Check charging time
-      ↓
-Check electricity consumption
-      ↓
-Look up electricity prices
-      ↓
-Calculate charging cost
-      ↓
-Record it somewhere
-      ↓
-Repeat for every charging session
-```
-
-With ecoMain + Home Assistant:
-
-```text
-Plug in the company EV
-          ↓
-       Charge
-          ↓
-          ↓
-          ↓
-Check monthly reimbursement
-          ↓
-       €XX.XX
-```
-
-The measurement and cost calculation happen automatically in the background.
-
----
-
-# ⚠️ Notes
-
-> [!IMPORTANT]
-> This example is intended for **monitoring and reimbursement estimation**. Requirements for official billing, fiscal reimbursement, or legally regulated electricity metering may differ depending on the country, employer, electricity provider, and applicable regulations.
-
-- The selected ecoMain channel should correspond to the circuit used for EV charging.
-- Dynamic-price sensors should provide a price per kWh compatible with the reimbursement currency.
-- The default calculation interval is one minute.
-- Charging cost is estimated from sampled real-time power and electricity price.
-- Shorter calculation intervals can improve the approximation when charging power changes frequently.
-- If Home Assistant is unavailable during part of a charging session, that period may not be included in the calculated reimbursement.
-
----
-
-# ✅ What You Need
-
-| | Requirement |
-|---|---|
-| ⚡ | **ecoMain** monitoring the EV charging circuit |
-| 🏠 | **Home Assistant** |
-| 💶 | **Fixed electricity tariff** or dynamic-price sensor |
-| 🔢 | **1 Number Helper** |
-| 🤖 | **1 Blueprint** |
+Select this helper in the Blueprint configuration.
 
 That's it.
 
----
+> **Charging circuit + electricity price + reimbursement helper**
 
-## 🚗 Final Workflow
-
-```text
-Company EV
-     ↓
-Charge at Home
-     ↓
-ecoMain measures power
-     ↓
-Home Assistant reads electricity price
-     ↓
-Blueprint calculates charging cost
-     ↓
-Monthly reimbursement accumulates
-     ↓
-             €XX.XX
-     ↓
-Submit for reimbursement
-```
+Once configured, the rest of the process is automatic.
 
 ---
+
+# 📊 Real-World Dynamic Price Test
+
+The automation was tested using an actual **ecoMain circuit** together with a live **Nord Pool electricity price**.
+
+This allows us to verify the complete chain from measured power to calculated charging cost.
+
+## ⚡ 1. ecoMain Measures the Charging Load
 
 <p align="center">
-  <b>ecoMain × Home Assistant</b><br>
-  Simple monitoring for smarter home energy use.
+  <img src="images/dynamic-power.png" width="950" alt="ecoMain EV Charging Power Test">
 </p>
+
+During the test, ecoMain measured a charging load of approximately **0.9 kW**.
+
+At around 15:00, the power dropped to almost zero as charging stopped.
+
+---
+
+## 📈 2. Nord Pool Price Changes During Charging
+
+<p align="center">
+  <img src="images/dynamic-price.png" width="950" alt="Nord Pool Dynamic Electricity Price Test">
+</p>
+
+The electricity price changed several times during the same charging period.
+
+The Blueprint automatically followed the current Nord Pool price without requiring manual tariff updates.
+
+---
+
+## 💶 3. Charging Cost Is Accumulated Automatically
+
+<p align="center">
+  <img src="images/dynamic-cost.png" width="950" alt="EV Dynamic Charging Cost Test">
+</p>
+
+The accumulated charging cost increased while the EV was charging.
+
+When the charging power dropped to zero, the cost stopped increasing automatically.
+
+The complete process is therefore:
+
+> **ecoMain power → current electricity price → charging cost → reimbursement**
+
+---
+
+# 💰 Monthly Reimbursement
+
+The final result is kept simple.
+
+The reimbursement helper displays the accumulated amount for the company EV:
+
+```text
+Company EV Monthly Reimbursement
+€ XX.XX
+```
+
+Instead of manually recording every charging session and calculating its electricity cost, the reimbursement amount can be viewed directly in Home Assistant.
+
+It can also be added to a Home Assistant dashboard for quick access.
+
+---
+
+## ⚙️ Fixed vs Dynamic Pricing
+
+| | Fixed Price | Dynamic Price |
+|---|---|---|
+| **Price source** | Manual tariff | Price sensor |
+| **Price changes automatically** | ❌ | ✅ |
+| **Nord Pool support** | — | ✅ |
+| **Best for** | Fixed contracts | Hourly / dynamic contracts |
+
+Both pricing methods use the **same Blueprint**.
+
+---
+
+## 📌 Requirements
+
+- Home Assistant
+- ecoMain energy monitoring
+- A measurable EV charging circuit
+- One Number Helper for monthly reimbursement
+- Optional: Nord Pool or another compatible electricity price sensor
+
+---
+
+## ✅ Result
+
+Once configured, the workflow is automatic:
+
+> 🚗 **Charge at home → ecoMain measures → Home Assistant calculates → reimbursement is recorded**
+
+The user does not need to manually record charging sessions or calculate electricity costs.
+
+**One Blueprint. Fixed or dynamic pricing. One clear reimbursement amount.**
